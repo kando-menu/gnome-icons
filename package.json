@@ -1,9 +1,10 @@
 {
   "name": "gnome-icons",
   "version": "0.1.0",
+  "type": "module",
   "description": "An icon theme for Kando based on GNOME's symbolic icons.",
   "scripts": {
-    "build": "node index.mjs"
+    "build": "node index.js"
   },
   "repository": {
     "type": "git",
@@ -15,8 +16,13 @@
     "url": "https://github.com/kando-menu/gnome-icons/issues"
   },
   "homepage": "https://github.com/kando-menu/gnome-icons#readme",
-  "dependencies": {
+  "devDependencies": {
     "@svgdotjs/svg.js": "^3.2.0",
-    "fantasticon": "^3.0.0"
+    "fantasticon": "^3.0.0",
+    "install": "^0.13.0",
+    "npm": "^10.8.1",
+    "progress": "^2.0.3",
+    "svgdom": "^0.1.19",
+    "svgo": "^3.3.2"
   }
 }

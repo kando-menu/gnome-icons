@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT
 
 import {registerWindow, SVG} from '@svgdotjs/svg.js'
-import {FontAssetType, generateFonts, OtherAssetType} from 'fantasticon';
 import fs from 'fs';
 import ProgressBar from 'progress';
 import {createSVGWindow} from 'svgdom'
@@ -52,8 +51,10 @@ function extractIcons(svg, outDirectory, metaFile) {
 
   const allIcons = {};
 
-  const iconNodes = svg.find('title');
-  const bar = new ProgressBar(':percent :bar', {total: iconNodes.length});
+  let iconNodes = svg.find('title');
+
+  const bar =
+      new ProgressBar('Extracting :percent [:bar]', {total: iconNodes.length});
 
   // Iterate over all icons, and create a cropped version of the SVG.
   iconNodes.forEach(function(title) {
@@ -66,29 +67,37 @@ function extractIcons(svg, outDirectory, metaFile) {
       return;
     }
 
-    // Set the viewBox to the bounding box of the icon.
-    const container = title.parent();
-
-    // This should be a <g> element.
-    if (container.type !== 'g') {
+    // There are icons which contain their title as a child element a second
+    // time. We want to skip these.
+    if (allIcons[iconName]) {
       return;
     }
 
+    // Set the viewBox to the bounding box of the icon.
+    const container = title.parent();
     const bbox = container.bbox();
 
     // Create a new SVG element.
     const croppedSVG = svg.clone();
     croppedSVG.clear();
-    croppedSVG.viewbox(bbox);
+    croppedSVG.attr('viewBox', `0 0 ${bbox.width} ${bbox.height}`);
+    croppedSVG.width(bbox.width);
+    croppedSVG.height(bbox.height);
+
+    // Add a top-level group element and translate it to the bounding box.
+    const group = croppedSVG.group();
+    group.translate(-bbox.x, -bbox.y);
 
     // Copy the icon to the new SVG.
     container.children().forEach(function(child) {
-      // Do not copy the invisible fill:none background box.
-      if (child.attr('fill') === 'none') {
-        return;
-      }
+      group.add(child.clone());
 
-      croppedSVG.add(child.clone());
+      // Make sure to copy any linked objects (via xlink:href).
+      if (child.attr('xlink:href')) {
+        const href = child.attr('xlink:href');
+        const linked = svg.findOne(href);
+        group.add(linked.clone());
+      }
     });
 
     // Write the cropped SVG to a file.
@@ -108,50 +117,50 @@ function extractIcons(svg, outDirectory, metaFile) {
  *
  * @param {string} directory The directory containing the SVG files.
  */
-function optimizeSVGs(directory) {
-  const files = fs.readdirSync(directory);
+function optimizeSVGs(srcDirectory, dstDirectory) {
+  const files = fs.readdirSync(srcDirectory);
 
-  const bar = new ProgressBar(':percent :bar', {total: files.length});
+  const bar =
+      new ProgressBar('Optimizing :percent [:bar]', {total: files.length});
 
   files.forEach(function(file) {
     bar.tick();
 
-    const svg = loadSVG(`${directory}/${file}`);
+    const svg = loadSVG(`${srcDirectory}/${file}`);
 
-    // Optimize the SVG.
+    // Remove the shape-rendering attribute.
+    svg.attr('shape-rendering', null);
+
+    // Optimize the SVG using SVGO.
     const optimized = optimize(svg.svg());
 
     // Write the optimized SVG back to the file.
-    fs.writeFileSync(`${directory}/${file}`, optimized.data);
+    fs.writeFileSync(`${dstDirectory}/${file}`, optimized.data);
   });
 }
 
-/**
- * Generate a font from a directory of SVG files.
- *
- * @param {string} iconDirectory The directory containing the SVG files.
- * @param {string} fontDirectory The directory to write the font to.
- * @param {string} fontName The name of the font.
- */
-function generateFont(iconDirectory, fontDirectory, fontName) {
-  generateFonts({
-    inputDir: iconDirectory,
-    outputDir: fontDirectory,
-    name: fontName,
-    fontTypes: [FontAssetType.TTF, FontAssetType.WOFF2, FontAssetType.WOFF],
-    assetTypes: [OtherAssetType.CSS],
-    fontHeight: 100,
-    tag: 'i',
-    normalize: true,
-    prefix: fontName,
-  }).then(results => console.log(results));
+function flattenSVGs(srcDirectory, dstDirectory) {
+  const files = fs.readdirSync(srcDirectory);
+
+  const bar =
+      new ProgressBar('Flattening :percent [:bar]', {total: files.length});
+
+  files.forEach(function(file) {
+    bar.tick();
+
+    const svg = loadSVG(`${srcDirectory}/${file}`);
+
+    svg.flatten();
+
+    // Write the optimized SVG back to the file.
+    fs.writeFileSync(`${dstDirectory}/${file}`, svg.svg());
+  });
 }
 
-
 createDir('build/icons');
-createDir('dist');
+createDir('dist/icons');
 
 const svg = loadSVG('src/src/icons.svg');
 extractIcons(svg, 'build/icons', 'dist/gnome-icons.json');
-optimizeSVGs('build/icons');
-generateFont('build/icons', 'dist', 'gnome-icons');
+optimizeSVGs('build/icons', 'dist/icons');
+flattenSVGs('dist/icons', 'dist/icons');
